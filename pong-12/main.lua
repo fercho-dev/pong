@@ -20,6 +20,8 @@
     modern systems.
 ]]
 
+Timer = require 'timer'
+
 -- push is a library that will allow us to draw our game at a virtual
 -- resolution, instead of however large our window is; used to provide
 -- a more retro aesthetic
@@ -42,6 +44,10 @@ require 'Paddle'
 -- but which will mechanically function very differently
 require 'Ball'
 
+require 'AIController'
+
+require 'PowerUp'
+
 WINDOW_WIDTH = 1280
 WINDOW_HEIGHT = 720
 
@@ -50,6 +56,20 @@ VIRTUAL_HEIGHT = 243
 
 -- speed at which we will move our paddle; multiplied by dt in update
 PADDLE_SPEED = 200
+
+function loopPowerUps()
+  powerUp.show = true
+  print("PowerUp activado!") -- Mensaje de depuración
+
+  -- Desactivar el PowerUp después de 10 segundos
+  Timer.after(10, function()
+      powerUp.show = false
+      print("PowerUp desactivado!") -- Mensaje de depuración
+
+      -- Reactivar el PowerUp después de 25 segundos de cooldown
+      Timer.after(powerUpCooldown, loopPowerUps)
+  end)
+end
 
 --[[
     Runs when the game first starts up, only once; used to initialize the game.
@@ -101,8 +121,17 @@ function love.load()
     player1 = Paddle(10, 30, 5, 20)
     player2 = Paddle(VIRTUAL_WIDTH - 10, VIRTUAL_HEIGHT - 30, 5, 20)
     ball = Ball(VIRTUAL_WIDTH / 2 - 2, VIRTUAL_HEIGHT / 2 - 2, 4, 4)
+    
+    difficulty = 'easy'
+    aiController = AIController(player2, ball, difficulty)
 
+    powerUp = PowerUp(VIRTUAL_WIDTH, VIRTUAL_HEIGHT)
+    powerUpTimer = 0
+    powerUpDuration = 7
+    powerUpCooldown = 35
+    
     gameState = 'start'
+    Timer.after(powerUpCooldown, loopPowerUps)
 end
 
 --[[
@@ -118,6 +147,7 @@ end
     since the last frame, which LÖVE2D supplies us.
 ]]
 function love.update(dt)
+    Timer.update(dt)
     if gameState == 'serve' then
         -- before switching to play, initialize ball's velocity based
         -- on player who last scored
@@ -203,6 +233,32 @@ function love.update(dt)
                 ball:reset()
             end
         end
+
+        -- Actualizar el jugador CPU
+        aiController:update(dt)
+
+        if powerUp:collides(player1) then
+          applyPowerUp(player1, powerUp.type)
+          sounds['paddle_hit']:play()
+      end
+      if powerUp:collides(player2) then
+        applyPowerUp(player2, powerUp.type)
+          sounds['paddle_hit']:play()
+      end
+
+        -- Temporizador para spawn de power-ups
+        powerUpTimer = powerUpTimer + dt
+        print("El temporizador es:")
+        print(powerUpTimer)
+        -- if powerUpTimer >= 5 and not powerUp.show then
+        --   --powerUp.type = "size"
+        --   powerUp.show = true
+        --   Timer.after(powerUpDuration, function()
+        --       -- Revertir después de 10 segundos
+        --       powerUpTimer = 0
+        --       powerUp.show = false
+        --   end)
+        -- end
     end
 
     -- player 1  vertical movement
@@ -223,21 +279,21 @@ function love.update(dt)
     end
 
     -- player 2 vertical movement
-    if love.keyboard.isDown('up') then
-        player2.dy = -PADDLE_SPEED
-    elseif love.keyboard.isDown('down') then
-        player2.dy = PADDLE_SPEED
-    else
-        player2.dy = 0
-    end
+    -- if love.keyboard.isDown('up') then
+    --     player2.dy = -PADDLE_SPEED
+    -- elseif love.keyboard.isDown('down') then
+    --     player2.dy = PADDLE_SPEED
+    -- else
+    --     player2.dy = 0
+    -- end
     -- player 2 horizontal movement
-    if love.keyboard.isDown('left') then
-        player2.dx = -PADDLE_SPEED
-    elseif love.keyboard.isDown('right') then
-        player2.dx = PADDLE_SPEED
-    else
-        player2.dx = 0
-    end
+    -- if love.keyboard.isDown('left') then
+    --     player2.dx = -PADDLE_SPEED
+    -- elseif love.keyboard.isDown('right') then
+    --     player2.dx = PADDLE_SPEED
+    -- else
+    --     player2.dx = 0
+    -- end
 
     -- update our ball based on its DX and DY only if we're in play state;
     -- scale the velocity by dt so movement is framerate-independent
@@ -311,6 +367,10 @@ function love.draw()
             0, 10, VIRTUAL_WIDTH, 'center')
         love.graphics.printf('Press Enter to serve!', 0, 20, VIRTUAL_WIDTH, 'center')
     elseif gameState == 'play' then
+        -- Dibujar power-ups
+        -- for i, powerUp in ipairs(powerUps) do
+        --   powerUp:render()
+        -- end
         -- no UI messages to display in play
     elseif gameState == 'done' then
         -- UI messages
@@ -324,6 +384,7 @@ function love.draw()
     player1:render()
     player2:render()
     ball:render()
+    powerUp:render()
 
     displayFPS()
 
@@ -351,4 +412,21 @@ function displayScore()
         VIRTUAL_HEIGHT / 3)
     love.graphics.print(tostring(player2Score), VIRTUAL_WIDTH / 2 + 30,
         VIRTUAL_HEIGHT / 3)
+end
+
+function applyPowerUp(player, powerUpType)
+  if powerUpType == "size" then
+      player:updateHeight(40)
+      powerUp.show = false
+      Timer.after(15, function()
+          player:updateHeight(20) -- Revertir después de 10 segundos
+      end)
+  elseif powerUpType == "speed" then
+      PADDLE_SPEED = PADDLE_SPEED * 2
+      powerUp.show = false
+      Timer.after(15, function()
+          PADDLE_SPEED = PADDLE_SPEED / 2 -- Revertir después de 10 segundos
+          powerUpTimer = 0
+      end)
+  end
 end
